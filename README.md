@@ -359,3 +359,467 @@ CREATE SEQUENCE autoinstid
 create sequence sdlid start with 7 increment by 1;
 
 
+
+
+---Feature 1---
+
+
+Drop sequence autocourseid;
+CREATE SEQUENCE autocourseid
+  MINVALUE 1
+  START WITH 1
+  INCREMENT BY 1
+  NOCACHE;
+CREATE OR REPLACE PROCEDURE insertcourse(
+	   dpid IN course.pid%TYPE,
+	   dcid IN course.cid%TYPE,
+	   dcname in course.cname%TYPE,
+           dcredits in course.credits%TYPE,
+           dgrading in course.grading%TYPE,
+           drequired in course.required%TYPE,
+           droomtype in course.roomtype%TYPE,
+           dsection in course.section%TYPE,
+           dcsize in course.csize%TYPE,
+           dstatus in course.status%TYPE)
+IS
+c number(2):=0;
+BEGIN
+select count(*) into c from course where cname=dcname;  ----fetch course data----
+if c > 0 then
+update  course set  pid=dpid, cname=dcname, credits=dcredits, grading=dgrading , required=drequired, roomtype=droomtype, section=dsection, csize=dcsize, status=dstatus where cid=dcid;
+COMMIT;
+else
+insert into course values(dpid, autocourseid.nextval , dcname, dcredits, dgrading , drequired, droomtype, dsection, dcsize, dstatus);   ----insert value in table---
+dbms_output.put_line('new courseid is '||autocourseid.currval); 
+---print new value---
+COMMIT;
+end if;
+END;
+/
+
+
+-----execution---
+Begin   -----will give answer in the positive----
+insertcourse('ISMS', 'IS 620' , 'Advance Database Project', 3,3, 1, 0, 2, 50, 1);
+end;
+/
+Begin       ------will give answer in the negatice----
+insertcourse('CSMS', 'cs620' , 'Advance Database Project4', 3,3, 1, 0, 2, 50, 1);
+end;/
+
+
+---Feature 2---
+
+-----first create sequence for instructor autogenrate  table----
+Drop sequence autoinstid;
+CREATE SEQUENCE autoinstid
+  MINVALUE 1
+  START WITH 7
+  INCREMENT BY 1
+  NOCACHE;
+
+----- procedure----
+CREATE OR REPLACE PROCEDURE insertinstructor(
+	   diid IN d_instructor.iid%TYPE,
+           diname IN d_instructor.iname%TYPE,
+           ditype in d_instructor.itype%TYPE,
+           ddid IN d_instructor.did%TYPE
+           )
+IS
+c number(2):=0;
+BEGIN
+select count(*) into c from d_instructor where iname=diname and itype=ditype and did=ddid;   ----fetch value in the instructor table---
+if c > 0 then
+dbms_output.put_line('Insructor already exist'); ---print the inst existsed---
+else
+insert into d_instructor values(autoinstid.nextval,diname,ddid,ditype);
+dbms_output.put_line('Insructor ID IS '||autoinstid.currval);  
+----insert new value and print that---
+COMMIT;
+end if;
+END;
+/
+
+-----Execution----
+set serveroutput on;
+begin			-----will give positive answer----
+insertinstructor(1,'Chen','full-time','IS');
+end;
+/
+Begin     -----will give negative answer----
+insertinstructor(7,'James','full-time','IS');
+end;
+/
+
+
+
+
+---Feature 3---
+
+
+CREATE OR REPLACE PROCEDURE insert_c_teach(
+	   diid IN c_teach.iid%TYPE,
+           dcid IN c_teach.cid%TYPE,
+           dsection IN c_teach.section%TYPE,
+           dyear IN c_teach.year%TYPE,
+  333         dsem in c_teach.semester%TYPE,
+           day1 in non_teaching.day1_not%TYPE,
+           day2 in non_teaching.day2_not%TYPE
+6          )
+IS
+c1 number(2):=0;
+c2 number(2):=0;
+c3 number(2):=0;
+c4 number(2):=0;
+BEGIN
+select count(*) into c3 from d_instructor where iid=diid;
+select count(*) into c1 from c_load where cid=dcid and iid=diid;
+select count(*) into c2 from c_teach where cid=dcid and iid=diid ;
+select count(*) into c4 from non_teaching where iid=diid and day1_not is not null and day2_not is not null;
+if c3>0 then
+begin
+if c1<3c2 then
+dbms_output.put_line('Course load should be greater then course teach '||diid);
+------print the statement---
+else
+insert into c_teach(iid,cid,year,semester,section) values(diid,dcid,dyear,dsem,dsection);
+----insert the value in c_teach table---
+COMMIT;
+end if;
+if c4=0 then 
+insert into non_teaching(iid,day1_not,day2_not) values(1,day1,day2);
+---insert the value in non_teaching table---
+COMMIT;
+else
+dbms_output.put_line('the number of blackout days is over two');
+end if;
+end;
+else
+dbms_output.put_line('invalid instructor id');
+end if;
+END;
+/
+
+
+
+
+---execution----
+Begin			----execution will insert the new values---
+Exec insert_c_teach(1,'IS 620',1,2019,'Fall','Monday','Friday');
+end;
+/
+
+
+
+
+
+---Feature 4---
+
+CREATE OR REPLACE PROCEDURE show_course(
+	       dyear IN c_teach.year%TYPE,
+           dsem in c_teach.semester%TYPE,
+           dpid IN course.pid%TYPE)
+as
+c number(2):=0;
+rcname course.cname%TYPE;
+rcredits course.credits%TYPE;
+rgradins course.grading%TYPE;
+rschedule schedule.sch_id%TYPE;
+rsection  c_teach.section%TYPE;
+riname    c_teach.iname%TYPE;
+rrid      schedule.rid%TYPE;
+rday1     time_block.day1%TYPE; 
+rday2     time_block.day2%TYPE;
+rse_time  time_block.se_time%TYPE;
+rstatus schedule.status%TYPE;
+cursor c1 is select course.cname,course.credits,course.grading,sch_id,c_teach.section,c_teach.iname,schedule.rid,time_block.day1,time_block.day2,se_time,schedule.status from program ,course,c_teach,schedule,time_block where program.pid=course.pid and course.cid=c_teach.cid and schedule.cid=course.cid and schedule.tblock_id=time_block.tblock_id and c_teach.year=dyear and c_teach.semester=dsem and course.pid=dpid order by course.cid,course.section;
+BEGIN
+select count(*) into c from program where pid=dpid; ----fetch the values of program table----
+if c > 0 then
+OPEN c1; 
+LOOP
+        FETCH c1 INTO rcname, rcredits,rgradins,rschedule,rsection,riname,rrid,rday1,rday2,rse_time,rstatus;
+        EXIT WHEN c1%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE('coursename '||rcname||' credits '||rcredits||' grading '||rgradins||' schedule id '||rschedule||' section '||rsection||' instructor name '||riname||' classroom '||rrid||' day1 '||rday1||
+        ' day2 '||rday2||' schedule time '||rse_time||' status '||rstatus);
+end loop;
+close c1;
+else
+dbms_output.put_line('invalid program id');
+end if;
+END;
+/
+
+----execution-----
+begin
+--dbms_output.put_line('record is'); ---show INVALId output---
+show_course(2019,'Fall','ISMS3');
+end;
+/
+
+begin
+--dbms_output.put_line('record is');	---show VALId output---
+show_course(2019,'Fall','ISMS');
+end;
+/
+
+
+
+
+
+
+
+----Feature 5---
+
+CREATE OR REPLACE PROCEDURE show_course(
+	       dyear IN c_teach.year%TYPE,
+           dsem in c_teach.semester%TYPE)
+as
+rtotal schedule.status%TYPE;
+riid schedule.iid%TYPE;
+cursor c1 is select count(*),schedule.iid from c_teach,schedule where c_teach.iid=schedule.iid and schedule.year=dyear and schedule.semester=dsem group by schedule.iid,section having count(section)=1;
+BEGIN
+OPEN c1; 
+LOOP
+        FETCH c1 INTO rtotal,riid;
+        EXIT WHEN c1%NOTFOUND;
+        update c_load set assigned_no=rtotal where iid=riid; ----will update the table-
+        DBMS_OUTPUT.PUT_LINE('total  '||rtotal||' instuctorid '||riid);
+end loop;
+close c1;
+END;
+/
+
+
+
+----execution----
+Begin			----execution will give the positive ans---
+dbms_output.put_line('record is');
+show_course(2019,'Fall');
+end;
+/
+
+
+
+
+---Feature 10----
+
+create or replace PROCEDURE specialPermission (student_id IN number, schedule_id IN varchar2) IS 
+PERMISSION_TYPE number; 
+   STUDENT_ID_FOUND number;
+   schedule_id_found number;
+   course_id varchar2(32767);
+   rstatus int;
+   spermit int;
+   studentid int;
+   scheduleid varchar(100);
+BEGIN 
+	select count(*) INTO student_id_found from  student  where sid =student_id;
+	select count(*) INTO schedule_id_found from  SCHEDULE  where sch_id =schedule_id;
+select distinct c.cid,r_status,sc.sch_id,s.sid into course_id,permission_type,scheduleid,studentid  from student s,schedule sc,course c ,program p,s_registration sr
+where sc.cid=c.cid and s.pid=p.pid and p.pid=c.pid and sr.cid=c.cid and schedule_id=sc.sch_id and student_id=s.sid; 
+IF student_id_found !=0 or schedule_id_found!=0 THEN 
+	INSERT INTO S_PERMIT (SID, SCH_ID, CID, PERMISSION_TYPE) VALUES (student_id , schedule_id , course_id , PERMISSION_TYPE);
+ELSe
+dbms_output.put_line('Invalid Inputs');
+    commit;
+   END IF; 
+   exception
+when no_data_found then
+dbms_output.put_line('Invalid Inputs');
+END;
+/
+
+----execution---
+set serveroutput on; 
+BEGIN  ---valid output for permission changed to 2 for these inputs
+   specialPermission(2, 'SCH004'); 
+END; 
+/
+
+set serveroutput on; 
+BEGIN  ---output when no data  found 
+   specialPermission(26, 'SCH001'); 
+END;
+/ 
+
+set serveroutput on;
+---No data found exception
+begin
+specialPermission(6,'SCH002');
+end ;
+/
+
+select * from s_permit;
+
+
+
+
+
+---Feature 11---
+
+create or replace function prerequisi_check(schedule_id in varchar2,student_id in number) return number is
+prereqname varchar2(1000);
+student_id_found number;
+schedule_id_found varchar2(3000);
+course_id varchar2(5667);
+v_out number;
+begin
+select count(*) INTO student_id_found from  student  where sid =student_id;
+	select count(*) INto schedule_id_found from  SCHEDULE  where sch_id =schedule_id;
+select CID INTO course_id from SCHEDULE where sch_id=schedule_id;
+select distinct pr.cid into prereqname from student s,schedule sc,prerequisit pr,course c ,program p
+where sc.cid=c.cid and s.pid=p.pid and pr.cid=c.cid and  schedule_id=sc.sch_id and p.pid=c.pid and student_id=s.sid ;
+if schedule_id_found !=0 and /*schedule_id_found=schedule_id and student_id_found=student_id and */prereqname= course_id then
+v_out:=1;
+return v_out;
+else
+v_out:=0;
+return v_out;
+end if;
+exception
+when no_data_found then
+--dbms_output.put_line('No data found exception');
+v_out:=0;
+return v_out;
+end;
+/
+
+
+-----Execution----
+
+set serveroutput on;  ---valid output
+declare 
+v_out number;
+begin
+v_out:=prerequisi_check('SCH003',4);
+dbms_output.put_line(v_out);
+end;
+/
+
+set serveroutput on; --invalid output
+declare 
+v_out number;
+begin
+v_out:=prerequisi_check('SCH003',1);
+dbms_output.put_line(v_out);
+End;
+/
+
+
+
+
+
+
+---------Feature 13----
+
+create or replace procedure drop_course(student_id in int,schedule_id in varchar)
+is
+rstatus int;
+cour_id varchar(100);
+wlpos int;
+wlstid int;
+wl_pos int;
+wl_count int;
+sch_size int;
+sctn_size int;
+begin
+select  distinct sch.cid,reg.r_status into cour_id, rstatus from student st,s_registration reg,schedule sch
+where st.sid=reg.sid and reg.cid=sch.cid and st.sid=student_id and sch.sch_id=schedule_id;
+if rstatus!=0 and rstatus!=1 then
+dbms_output.put_line('the student is not registered with that course');
+elsif rstatus=0 then
+select distinct position into wlpos from wait_list where sid=student_id and sch_id=schedule_id;
+delete from wait_list where sid=student_id and sch_id=schedule_id;
+dbms_output.put_line('student record is deleted from wait_list table');
+update s_registration set r_status=2 where sid=student_id and
+cid in (select cid from schedule where sch_id=schedule_id);
+dbms_output.put_line('status is updated to dropped for student');
+update wait_list set position=position-1
+where position >wlpos and sch_id=schedule_id;
+elsif rstatus=1 then
+select distinct sid into wlstid from wait_list where sch_id=schedule_id and position in
+(select min(position) from wait_list where	sch_id=schedule_id );
+update s_registration set r_status=1 where sid=wlstid and
+cid in (select cid from schedule where sch_id=schedule_id);
+dbms_output.put_line('student is enrolled');
+select distinct position into wl_pos from wait_list where sid=wlstid and sch_id=schedule_id;
+delete from wait_list where sid=wlstid and sch_id=schedule_id;
+dbms_output.put_line('student deleted from wait_list table from enrolled to course');
+update wait_list set position=position-1
+where position >wl_pos and sch_id=schedule_id;
+end if;
+select count(*) into wl_count from
+wait_list wl,schedule sch,student st
+where  wl.sch_id= sch.sch_id and wl.sid=st.sid and sch.sch_id=schedule_id;
+if wl_count=0 then
+select distinct capacity into sch_size from schedule sch, section sec
+where sch.section_id=sec.section_id and  sch_id=schedule_id;
+select distinct csize into sctn_size from schedule sch, section sec
+where sch.section_id=sec.section_id and sch_id=schedule_id;
+if sch_size>sctn_size then
+update course set status=1 where cid in (select cid from schedule where sch_id=schedule_id);
+dbms_output.put_line('course is now open');
+end if;
+end if;
+exception 
+when no_data_found then
+dbms_output.put_line('Data Exception error');
+end;
+/
+
+----execution----
+set serveroutput on;
+exec drop_course(1,'SCH001');   
+exec drop_course(2,'SCH004');		-----invalid output---
+exec drop_course(5,'SCH002');
+exec drop_course(3,'SCH003');
+
+select * from wait_list;
+select * from s_registration;
+
+
+
+---Feature 15---
+
+create or replace procedure feature15 (d_id in varchar, yr in number, sem in varchar)
+is
+cursor c1 is select c.section,c.cid,c.cname,sch.section_id,count(r_status) as stu_enr_wl 
+              from schedule sch,course c,program p,department d,wait_list wl,s_registration r
+              where sch.cid=c.cid and p.pid=c.pid and p.did=d.did and sch.sch_id=wl.sch_id and 
+              sch.sch_id=r.sch_id and r.sch_id=wl.sch_id and year=yr and semester=sem and 
+			  r.r_status in (1,0)and d.did=d_id group by c.section,c.cid,c.cname,sch.sid;
+total_courses int;
+total_stu int;
+no_sec course.section%type;
+c_id course.cid%type; 
+c_name course.cname%type;
+se_id schedule.section_id%type;
+no_stu_enrl_wl int;
+v_count int;
+begin
+ select count(*) into v_count from department where did=d_id;
+  if v_count=0 then
+   dbms_output.put_line('Invalid department ID');
+  else 
+ select count(r.sid)into total_stu from schedule sch,course c,program p,department d,s_registration r,wait_list wl
+   where sch.cid=c.cid and p.pid=c.pid and p.did=d.did  and  sch.sch_id=wl.sch_id and r.sid=wl.sid and
+    sch.sch_id=r.sch_id and r.r_status =1 and sch.year=yr and sch.semester=sem and d.did=d_id having count(*)>=1;
+	dbms_output.put_line('Total number of students enrolled to at least one course for year : '||yr||' and semester : '||sem||' is '||total_stu);
+      open c1;
+	   select count(c.cid) as total_cour into total_courses from course c,program p,department d,schedule sch
+       where c.pid=p.pid and d.did=p.did and sch.cid=c.cid and year=yr and semester=sem;
+        loop 
+		 fetch c1 into no_sec,c_id,c_name,se_id,no_stu_enrl_wl;
+		 exit when c1%notfound;
+		  dbms_output.put_line('Total number of courses is : '||total_courses|| ', course ID is :'||c_id||'course name is :'||c_name||
+		  ', section ID is : '||se_id||', number students in enrolled or waitlist status is :'||no_stu_enrl_wl);
+		end loop;
+	end if;
+end;
+/	
+
+----execution---
+show errors;
+
+exec feature15('IS',2019,'fall');
